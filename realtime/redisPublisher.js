@@ -190,6 +190,9 @@ function publishSample(sample, event) {
   sample.aspect = { name: arr[1] }; // for socket.io perspective filtering
   sample.absolutePath = subjAbsolutePath; // used for perspective filtering
 
+  const startTime = Date.now();
+  console.log(`|| publishSample`);
+
   return redisOps.batchCmds()
     .return('subTags', (batch) =>
       batch.getSubjectTags(sample.subject)
@@ -198,6 +201,7 @@ function publishSample(sample, event) {
       batch.getAspectTags(sample.aspect)
     )
     .exec()
+    .tap(() => console.log(`|| get tags ${Date.now() - startTime}`))
     .then(({ subTags, aspTags }) => {
       sample.subject.tags = subTags; // for socket.io perspective filtering
       sample.aspect.tags = aspTags; // for socket.io perspective filtering

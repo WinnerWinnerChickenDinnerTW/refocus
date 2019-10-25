@@ -532,13 +532,17 @@ function upsertOneParsedSample(sampleQueryBodyObj, parsedSample, isBulk, user) {
 
   let sample;
   let noChange = false;
+  const startTime = Date.now();
+  console.log(`|||||| upsertOneParsedSample ${sampleName}`)
 
   /*
    * If any of these promises throws an error, we drop through to the catch
    * block and return an error. Otherwise, we return the sample.
    */
   return checkWritePermission(aspectName, userName, isBulk)
+  .tap(() => console.log(`|||||| writePermission ${Date.now() - startTime}`))
   .then(() => redisClient.hgetallAsync(sampleKey))
+  .tap(() => console.log(`|||||| get sample key ${Date.now() - startTime}`))
   .then((response) => {
     sample = response;
 
@@ -551,6 +555,7 @@ function upsertOneParsedSample(sampleQueryBodyObj, parsedSample, isBulk, user) {
         db.Subject.findOne(subjWhereObj),
         db.Aspect.findOne(aspWhereObj)
       )
+      .tap(() => console.log(`|||||| get from db ${Date.now() - startTime}`))
       .spread((dbSubj, dbAsp) => {
         if (!dbSubj || dbSubj.isPublished === false) {
           handleUpsertError(constants.objectType.subject, isBulk, sampleName);
@@ -575,6 +580,7 @@ function upsertOneParsedSample(sampleQueryBodyObj, parsedSample, isBulk, user) {
     // sampleQueryBodyObj updated with fields
     return updateSampleAttributes(sampleQueryBodyObj, sample);
   })
+  .tap(() => console.log(`|||||| calculate status ${Date.now() - startTime}`))
   .then(() => {
     if (sample) { // if sample exists, just update sample
       delete sampleQueryBodyObj.name; // to avoid updating sample name
@@ -610,7 +616,9 @@ function upsertOneParsedSample(sampleQueryBodyObj, parsedSample, isBulk, user) {
 
       .exec();
   })
+  .tap(() => console.log(`|||||| set hash ${Date.now() - startTime}`))
   .then(() => redisClient.hgetallAsync(sampleKey))
+  .tap(() => console.log(`|||||| get hash ${Date.now() - startTime}`))
   .then((updatedSamp) => {
     if (!updatedSamp.name) { // sample should have name
       handleUpsertError(constants.objectType.sample, isBulk, sampleName);
@@ -1503,6 +1511,8 @@ module.exports = {
       }
     });
 
+    const startTime = Date.now();
+    console.log('|| bulkUpsertByName')
     const promises = sampleQueryBody.map((sampleReq) => {
       // Throw error if sample is upserted with read-only field.
       try {
@@ -1514,13 +1524,16 @@ module.exports = {
         }
 
         // parsed object has subject name, aspect name
-        return upsertOneParsedSample(sampleReq, parsed, true, user);
+        const startTime = Date.now();
+        console.log(`|||| ${sampleName}`)
+        return upsertOneParsedSample(sampleReq, parsed, true, user)
+        .tap(() => console.log('|||| done', Date.now() - startTime))
       } catch (err) {
         return Promise.resolve({ isFailed: true, explanation: err });
       }
     });
 
-    return Promise.all(promises);
+    return Promise.all(promises).tap(() => console.log('|| done', Date.now() - startTime));
   }, // bulkUpsertByName
 
   cleanAddSubjectToSample, // export for testing only
